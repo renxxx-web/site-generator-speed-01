@@ -8,9 +8,14 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setFlagsFromString } from 'node:v8';
 
-// V8's incremental marking off, set before solve.js is imported so all of its work runs under it (the rules: the house
-// baseline runs with --no-incremental-marking, and an entry may tune V8's flags too). Liftoff is off for the same
+// V8 tuning, set before solve.js is imported so all of its work runs under it (the rules: the house baseline runs
+// with --no-incremental-marking, and an entry may tune V8's flags too). Incremental marking is off, and the
+// WebAssembly engine is pinned to its Liftoff tier: this program makes exactly one pass over the input per
+// process, so the TurboFan tier-up compilation would be paid in full on every run and never amortised —
+// measured locally, tier-up costs roughly 290 ms of CPU per fresh process on the practice set while Liftoff-only
+// execution of the same bytecode is far cheaper than that.
 setFlagsFromString('--no-incremental-marking');
+setFlagsFromString('--liftoff-only');
 
 /** solve.js, imported by its URL (a .js module carries no types) and typed by its contract. */
 const { answerAll } = (await import(new URL('./solve.js', import.meta.url).href)) as {
