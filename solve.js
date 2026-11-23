@@ -8,11 +8,26 @@
 // needs a slug is handed back to the reference slugifier in lib/text.js through the
 // slug_non_ascii import — the one corner (non-ASCII slugs) where the JS original is kept
 // as the authority.
+//
+// Two builds of the same engine ship side by side: sitegen.wasm (SIMD128 + bulk memory)
+// and sitegen-scalar.wasm (no SIMD). A WebAssembly.validate probe on a minimal SIMD
+// module picks the SIMD build where the runtime supports it and the scalar build
+// otherwise; both compute byte-identical answers.
 
 import { readFileSync } from 'node:fs';
 import { slugify } from './lib/text.js';
 
-const bytes = readFileSync(new URL('./sitegen.wasm', import.meta.url));
+// Minimal module whose only function splats an i32 into an i8x16: it validates only
+// where the SIMD128 feature is available.
+const SIMD_PROBE = new Uint8Array([
+  0, 97, 115, 109, 1, 0, 0, 0, // \0asm, version 1
+  1, 5, 1, 96, 0, 1, 123, // type: () -> v128
+  3, 2, 1, 0, // function 0 : type 0
+  10, 8, 1, 6, 0, 65, 0, 253, 15, 11, // code: i32.const 0; i8x16.splat; end
+]);
+const engineFile = WebAssembly.validate(SIMD_PROBE) ? './sitegen.wasm' : './sitegen-scalar.wasm';
+
+const bytes = readFileSync(new URL(engineFile, import.meta.url));
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
